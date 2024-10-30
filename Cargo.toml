@@ -1,0 +1,9 @@
+[package]
+name = "luadec"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.91"
+lazy_static = "1.5.0"
+mlua = {version="0.9", features=["vendored", "lua54", "async", "send"]}
