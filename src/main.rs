@@ -6,8 +6,28 @@ use std::{fs, os::unix, path::Path, string};
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 
+// I guess ill just throw the data here and do rust stuff after lua i done.
 lazy_static! {
     static ref PACKAGE_STORE: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
+    static ref MANAGERS: Mutex<Vec<Manager>> = Mutex::new(Vec::new());
+}
+
+#[derive(Debug, Clone)]
+struct Manager {
+    name: String,
+    add: String,
+    remove: String,
+    sync: String,
+    upgrade: String,
+}
+
+fn lua_table_to_hashmap(table: mlua::Table) -> mlua::Result<HashMap<String, String>> {
+    let mut map = HashMap::new();
+    for pair in table.pairs::<String, String>() {
+        let (key, value) = pair?;
+        map.insert(key, value);
+    }
+    Ok(map)
 }
 
 pub fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlua::Error> {
@@ -66,15 +86,83 @@ pub fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>,
         Ok(())
     })?;
 
+    let add_manager = lua.create_function(|_, manager_table: mlua::Table| {
+        let name: String = manager_table.get("name")?;
+        let add: String = manager_table.get("add")?;
+        let remove: String = manager_table.get("remove")?;
+        let sync: String = manager_table.get("sync")?;
+        let upgrade: String = manager_table.get("upgrade")?;
+
+        let package_manager = Manager {
+            name,
+            add,
+            remove,
+            sync,
+            upgrade,
+        };
+
+        {
+            let mut managers = MANAGERS.lock().unwrap();
+            managers.push(package_manager);
+        }
+
+        Ok(())
+    })?;
+
     module.set("setup", setup_function)?;
 
     module.set("create_symlink", create_symlink)?;
 
     module.set("packages", add_packages)?;
-
-    // symlink
+    module.set("add_manager", add_manager)?;
 
     Ok(module)
+}
+
+fn check_managers() -> (Vec<String>, Vec<String>) {
+    let defined_managers = MANAGERS.lock().unwrap();
+    let defined_set: HashSet<String> = defined_managers
+        .iter()
+        .map(|manager| manager.name.clone())
+        .collect();
+
+    let used_managers = PACKAGE_STORE.lock().unwrap();
+    let used_set: HashSet<String> = used_managers
+        .iter()
+        .map(|manager| manager.0.clone())
+        .collect();
+
+    let common: Vec<String> = defined_set.intersection(&used_set).cloned().collect();
+
+    // Find unique elements in vec2
+    let undefined_managers: Vec<String> = used_set.difference(&defined_set).cloned().collect();
+
+    return (common, undefined_managers);
+}
+
+//fn get_packages_from_manager(manager_name: String) -> Vec<String> {
+//    let manager = PACKAGE_STORE.lock().unwrap();
+//    let used_set: HashSet<String> = manager.into_keys;
+//    let x: Vec<String> = Vec::new();
+//    x
+//}
+fn get_packages_from_manager(manager_name: &str) -> Vec<String> {
+    let package_store = PACKAGE_STORE.lock().unwrap();
+    return package_store
+        .get(manager_name)
+        .into_iter()
+        .flat_map(|set| set.iter().cloned())
+        .collect();
+}
+
+fn get_manager_from_name(manager_name: String) -> Vec<Manager> {
+    let managers = MANAGERS.lock().unwrap();
+
+    managers
+        .iter()
+        .filter(|&manager| manager.name == manager_name)
+        .cloned()
+        .collect()
 }
 
 fn main() -> Result<(), mlua::Error> {
@@ -88,6 +176,36 @@ fn main() -> Result<(), mlua::Error> {
 
     println!("{:#?}", globals);
     lua.load(&lua_code).exec()?;
+
+    // Print all packages stored in PACKAGE_STORE
+    //let package_store = PACKAGE_STORE.lock().unwrap();
+    //println!("Current Package Store: {:?}", *package_store);
+
+    //let managers = MANAGERS.lock().unwrap();
+    let (defined_managers, undefined_managers) = check_managers();
+
+    if !undefined_managers.is_empty() {
+        println!("DID NOT DEFINE MANAGER: {:#?}", undefined_managers);
+    }
+
+    for manager_name in defined_managers {
+        let packages = get_packages_from_manager(manager_name.as_str());
+        let managers = get_manager_from_name(manager_name);
+
+        let manager = managers
+            .first()
+            .unwrap_or(&Manager {
+                name: "No manager found".to_string(),
+                add: "No manager found".to_string(),
+                remove: "No manager found".to_string(),
+                sync: "No manager found".to_string(),
+                upgrade: "No manager found".to_string(),
+            })
+            .clone();
+        packages
+            .iter()
+            .for_each(|package| println!("{:#?} {:#?}", manager.add, package));
+    }
 
     Ok(())
 }

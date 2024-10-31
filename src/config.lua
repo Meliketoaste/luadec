@@ -43,3 +43,22 @@ luadec.packages("Debian", {
   "tmux",
   "hat",
 })
+
+luadec.add_manager(
+  {
+    name = "PACMAN",
+    add = "pacman -S #:?",
+    remove = "pacman -R #:?",
+    sync = "<COMMAND>",
+    upgrade = "<COMMAND>",
+  }
+)
+
+luadec.add_manager(
+  {
+    name = "AUR",
+    add = "pacman -S #:?",
+    remove = "<COMMAND> #:?",
+    sync = "<COMMAND>",
+    upgrade = "<COMMAND>",
+  })
