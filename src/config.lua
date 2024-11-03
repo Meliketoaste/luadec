@@ -30,12 +30,11 @@ luadec.setup()
 
 luadec.create_symlink("/home/main/dev/luadec/src/config.lua", "/home/main/.config/luadec/config.lua")
 
-
 -- Does not install yet ()
 luadec.packages("AUR", {
   "neovim",
   "tmux",
-  "hat",
+  "bat"
 })
 
 luadec.packages("Debian", {
@@ -57,7 +56,16 @@ luadec.add_manager(
 luadec.add_manager(
   {
     name = "AUR",
-    add = "pacman -S #:?",
+    add = 'printf "I just ran printf #:?\n"',
+    remove = "<COMMAND> #:?",
+    sync = "<COMMAND>",
+    upgrade = "<COMMAND>",
+  })
+
+luadec.add_manager(
+  {
+    name = "Debian",
+    add = "sudo apt install #:?",
     remove = "<COMMAND> #:?",
     sync = "<COMMAND>",
     upgrade = "<COMMAND>",

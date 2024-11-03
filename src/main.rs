@@ -1,10 +1,16 @@
+mod library;
+
 #[macro_use]
 extern crate lazy_static;
 use mlua::prelude::*;
+use std::process::Command;
+use std::vec;
 use std::{fs, os::unix, path::Path, string};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
+
+use library::*;
 
 // I guess ill just throw the data here and do rust stuff after lua i done.
 lazy_static! {
@@ -165,6 +171,17 @@ fn get_manager_from_name(manager_name: String) -> Vec<Manager> {
         .collect()
 }
 
+fn get_install_commands(manager: Manager, package_names: Vec<String>) {
+    let add_command = manager.add.clone();
+
+    package_names.iter().for_each(|package| {
+        let command = add_command.replace("#:?", package);
+        if !run_command(command.as_str()) {
+            println!("FUCK");
+        }
+    });
+}
+
 fn main() -> Result<(), mlua::Error> {
     let lua = Lua::new();
 
@@ -191,7 +208,6 @@ fn main() -> Result<(), mlua::Error> {
     for manager_name in defined_managers {
         let packages = get_packages_from_manager(manager_name.as_str());
         let managers = get_manager_from_name(manager_name);
-
         let manager = managers
             .first()
             .unwrap_or(&Manager {
@@ -202,9 +218,11 @@ fn main() -> Result<(), mlua::Error> {
                 upgrade: "No manager found".to_string(),
             })
             .clone();
-        packages
-            .iter()
-            .for_each(|package| println!("{:#?} {:#?}", manager.add, package));
+
+        get_install_commands(manager, packages);
+        //packages
+        //    .iter()
+        //    .for_each(|package| get_install_commands(manager.clone(), package));
     }
 
     Ok(())
