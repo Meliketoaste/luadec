@@ -1,9 +1,9 @@
 local luadec = require "luadec"
 -- src/zsh_module.lua
 local zsh_module = {
-  enable = false,     -- Master toggle for enabling the config
-  prompt = "default", -- Custom prompt string
-  aliases = {},       -- Custom aliases
+  enable = false,
+  prompt = "default",
+  aliases = {},
 }
 
 -- Function to set for the Zsh module
@@ -14,12 +14,12 @@ function zsh_module.opts(user_options)
       zsh_module[key] = value
     end
   end
-  -- turn to luadec helper func
 
   -- Automatically apply the configuration after setting
   if zsh_module.enable then
     luadec.packages("AUR", {
       "zsh",
+      zsh_module.prompt,
     })
     print("Configuring Zsh with the following settings:")
     print("Prompt:", zsh_module.prompt)

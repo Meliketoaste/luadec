@@ -8,7 +8,7 @@ hello_world.print_message() --                           :D
 
 programs.zsh.opts({
   enable = true,
-  prompt = "%B%F{blue}%n@%m%f%b:%~%# ",
+  prompt = "woah",
   aliases = {
     Ll = "ls -lah --color=auto",
     gs = "git status",
@@ -28,7 +28,7 @@ local luadec = require 'luadec'
 luadec.setup()
 
 
-luadec.create_symlink("/home/main/dev/luadec/src/config.lua", "/home/main/.config/luadec/config.lua")
+-- luadec.create_symlink("/home/main/dev/luadec/src/config.lua", "/home/main/.config/luadec/config.lua")
 
 -- Does not install yet ()
 luadec.packages("AUR", {

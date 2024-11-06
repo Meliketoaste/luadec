@@ -2,10 +2,18 @@ mod library;
 
 #[macro_use]
 extern crate lazy_static;
+use directories::ProjectDirs;
 use mlua::prelude::*;
+use std::path::PathBuf;
 use std::process::Command;
 use std::vec;
-use std::{fs, os::unix, path::Path, string};
+use std::{
+    fs::{self, File},
+    io::{self, Write},
+    os::unix,
+    path::Path,
+    string,
+};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
@@ -182,16 +190,33 @@ fn get_install_commands(manager: Manager, package_names: Vec<String>) {
     });
 }
 
+fn get_config_path() -> PathBuf {
+    if cfg!(debug_assertions) {
+        let path = Path::new("./src/config.lua");
+        path.to_path_buf()
+    } else {
+        ProjectDirs::from("com", "ToastedProducts", "Luadec")
+            .map(|dirs| dirs.config_dir().join("config.lua"))
+            .inspect(|path| {
+                if !path.exists() {
+                    fs::create_dir_all(path.parent().unwrap()).ok();
+                    File::create(path).ok();
+                }
+            })
+            .unwrap_or_else(|| panic!("Could not determine configuration directory"))
+    }
+}
+
 fn main() -> Result<(), mlua::Error> {
     let lua = Lua::new();
-
-    let lua_code =
-        fs::read_to_string("./src/config.lua").expect("Should have been able to read the file");
+    let config_path = get_config_path();
+    println!("{:?}", config_path);
+    let lua_code = fs::read_to_string(config_path).expect("Should have been able to read the file");
 
     let globals = lua.globals();
     create_module(&lua, "luadec")?;
 
-    println!("{:#?}", globals);
+    //println!("{:#?}", globals);
     lua.load(&lua_code).exec()?;
 
     // Print all packages stored in PACKAGE_STORE
