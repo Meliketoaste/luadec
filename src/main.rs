@@ -5,8 +5,6 @@ extern crate lazy_static;
 use directories::ProjectDirs;
 use mlua::prelude::*;
 use std::path::PathBuf;
-use std::process::Command;
-use std::vec;
 use std::{
     fs::{self, File},
     io::{self, Write},
@@ -44,7 +42,7 @@ fn lua_table_to_hashmap(table: mlua::Table) -> mlua::Result<HashMap<String, Stri
     Ok(map)
 }
 
-pub fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlua::Error> {
+fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlua::Error> {
     let mut luaa = lua.clone();
     let globals = lua.globals();
     let package: mlua::Table = globals.get("package")?;
@@ -58,24 +56,65 @@ pub fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>,
         Ok(())
     })?;
 
-    // Symlinking
-    let create_symlink = lua.create_function(|_, (original, destination): (String, String)| {
-        {
-            if Path::new(&original).exists() {
+    let manage_file = lua.create_function(|_, (dest, config): (String, mlua::Table)| {
+        let mut map: HashMap<String, String> = HashMap::new();
+        let source: String = config.get("content")?;
+
+        let vars: LuaTable = config.get("vars")?;
+        // if vars.is_empty() {
+        //     println!("WOAHHH");
+        // }
+        for pair in vars.clone().pairs::<String, String>() {
+            let (key, value) = pair?;
+            map.insert(key, value);
+        }
+
+        println!("dest: {:#?}", dest);
+        println!("source: {:#?}", source);
+        //println!("vars is: {:#?}", vars);
+        println!("map is: {:#?}", map);
+
+        if Path::new(&dest).exists() {
+            if Path::new(&source).exists() {
+                if let Err(e) = unix::fs::symlink(&source, &dest) {
+                    eprintln!("Failed to create symlink: {}", e);
+                } else {
+                    println!("Symlink created from {} to {}", source, dest);
+                }
             } else {
-                println!("symlink orgin {:#?} does not exist", &original);
+                let mut content = source.clone();
+
+                for (key, value) in &map {
+                    content = content.replace(&format!("${{{}}}", key), value);
+                }
+
+                // Overwrite the existing destination file with new content
+                if let Err(e) = fs::write(&dest, &content) {
+                    eprintln!("Failed to write content to {}: {}", dest, e);
+                } else {
+                    println!("Content written to {}", dest);
+                }
+            }
+        } else if Path::new(&source).exists() {
+            if let Err(e) = unix::fs::symlink(&source, &dest) {
+                eprintln!("Failed to create symlink: {}", e);
+            } else {
+                println!("Symlink created from {} to {}", source, dest);
+            }
+        } else {
+            let mut content = source.clone();
+
+            for (key, value) in &map {
+                content = content.replace(&format!("${{{}}}", key), value);
+            }
+
+            if let Err(e) = fs::write(&dest, &content) {
+                eprintln!("Failed to write content to {}: {}", dest, e);
+            } else {
+                println!("Content written to {}", dest);
             }
         }
 
-        //let first_char_org = original.chars().next().unwrap();
-        //let first_char_dest = destination.chars().next().unwrap();
-        //println!(
-        //    "original: {:#?}\nlink: {:#?}",
-        //    first_char_org, first_char_dest
-        //);
-
-        unix::fs::symlink(original, destination);
-        //println!("Hello, luadec!");
         Ok(())
     })?;
 
@@ -125,10 +164,11 @@ pub fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>,
 
     module.set("setup", setup_function)?;
 
-    module.set("create_symlink", create_symlink)?;
+    //module.set("create_symlink", create_symlink)?;
 
     module.set("packages", add_packages)?;
     module.set("add_manager", add_manager)?;
+    module.set("file", manage_file)?;
 
     Ok(module)
 }
@@ -151,7 +191,7 @@ fn check_managers() -> (Vec<String>, Vec<String>) {
     // Find unique elements in vec2
     let undefined_managers: Vec<String> = used_set.difference(&defined_set).cloned().collect();
 
-    return (common, undefined_managers);
+    (common, undefined_managers)
 }
 
 //fn get_packages_from_manager(manager_name: String) -> Vec<String> {
@@ -210,10 +250,10 @@ fn get_config_path() -> PathBuf {
 fn main() -> Result<(), mlua::Error> {
     let lua = Lua::new();
     let config_path = get_config_path();
-    println!("{:?}", config_path);
+    //println!("{:?}", config_path);
     let lua_code = fs::read_to_string(config_path).expect("Should have been able to read the file");
 
-    let globals = lua.globals();
+    //let globals = lua.globals();
     create_module(&lua, "luadec")?;
 
     //println!("{:#?}", globals);
@@ -245,9 +285,6 @@ fn main() -> Result<(), mlua::Error> {
             .clone();
 
         get_install_commands(manager, packages);
-        //packages
-        //    .iter()
-        //    .for_each(|package| get_install_commands(manager.clone(), package));
     }
 
     Ok(())

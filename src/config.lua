@@ -43,6 +43,26 @@ luadec.packages("Debian", {
   "hat",
 })
 
+-- Symlinks if content is path else copy / writes with
+luadec.file(
+  "/home/main/woahhie.sh", {
+    vars = {
+      x = "woah",
+      y = "woah",
+    },
+
+    content = -- Or use a path /home/main
+    [[
+${x}
+what isgoing on
+what isgoing on
+what isgoing on
+what isgoing on
+]]
+  }
+)
+--local x = luadec.dir()
+
 luadec.add_manager(
   {
     name = "PACMAN",
