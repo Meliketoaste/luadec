@@ -53,7 +53,7 @@ fn get_current_store() -> HashMap<String, HashSet<String>> {
     } else {
         File::create(package_store_file).expect("failed  to create package_store_file");
     }
-    println!("{:#?}", package_store);
+    //println!("{:#?}", package_store);
     package_store
 }
 
