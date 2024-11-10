@@ -34,7 +34,8 @@ luadec.setup()
 luadec.packages("AUR", {
   "neovim",
   "tmux",
-  "bat"
+  "bat",
+  "alacritty",
 })
 
 luadec.packages("Debian", {
