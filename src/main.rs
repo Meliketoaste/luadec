@@ -200,7 +200,7 @@ fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlu
         }
 
         // Print the current package store after installation
-        println!("Current Package Store: {:?}", *store);
+        //println!("Current Package Store: {:?}", *store);
 
         Ok(())
     })?;
@@ -252,24 +252,18 @@ fn check_managers() -> HashMap<String, HashSet<String>> {
         .map(|manager| manager.0.clone())
         .collect();
 
-    // Find common managers
     let common: HashSet<String> = defined_set.intersection(&used_set).cloned().collect();
 
-    // Find undefined managers (those that are used but not defined)
     let undefined_managers: HashSet<String> = used_set.difference(&defined_set).cloned().collect();
 
-    // Create a new HashMap that contains the modified data
     let mut modified_manager_map: HashMap<String, HashSet<String>> = HashMap::new();
 
-    // Add the common managers (those defined and used) to the modified map
     for manager in common {
-        // Get the packages associated with the manager
         if let Some(packages) = used_managers.get(&manager) {
             modified_manager_map.insert(manager, packages.clone());
         }
     }
 
-    // Optionally, you could also add the undefined managers if you want them to show up as well
     for manager in undefined_managers {
         modified_manager_map.insert(manager, HashSet::new()); // Empty set for undefined managers
     }
