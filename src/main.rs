@@ -90,7 +90,8 @@ fn add_new_packages(new_additions: HashMap<String, HashSet<String>>) -> io::Resu
         }
     }
 
-    let json_data = serde_json::to_string(&current_store).expect("Failed to serialize to JSON");
+    let json_data =
+        serde_json::to_string_pretty(&current_store).expect("Failed to serialize to JSON");
 
     let package_store_file = get_config_path().with_file_name("package_store.json");
 
