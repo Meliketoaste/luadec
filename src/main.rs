@@ -1,31 +1,27 @@
 mod library;
 
-#[macro_use]
-extern crate lazy_static;
+use anyhow::Result;
+use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use mlua::prelude::*;
-use std::io::Read;
-use std::path::PathBuf;
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{self, Write},
-    os::unix,
-    path::Path,
-    string,
-};
-
-use serde_json;
-
+use mlua::Lua;
+use once_cell::sync::Lazy;
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{self, Read, Write},
+    os::unix,
+    path::{Path, PathBuf},
+    string,
+};
 
 use library::*;
 
 // I guess ill just throw the data here and do rust stuff after lua i done.
-lazy_static! {
-    static ref PACKAGE_STORE: Mutex<HashMap<String, HashSet<String>>> = Mutex::new(HashMap::new());
-    static ref MANAGERS: Mutex<Vec<Manager>> = Mutex::new(Vec::new());
-}
+static PACKAGE_STORE: Lazy<Mutex<HashMap<String, HashSet<String>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+static MANAGERS: Lazy<Mutex<Vec<Manager>>> = Lazy::new(|| Mutex::new(Vec::new()));
 
 #[derive(Debug, Clone)]
 struct Manager {
@@ -35,6 +31,24 @@ struct Manager {
     sync: String,
     upgrade: String,
     priority: i32,
+}
+
+#[derive(Parser)]
+#[command(version, about, long_about = None)]
+#[command(propagate_version = true)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Adds files to myapp
+    Add { name: Option<String> },
+    /// Runs luadec (only one that works)
+    Run { name: Option<String> },
+    /// Lists current packages
+    LisList { name: Option<String> },
 }
 
 fn get_current_store() -> HashMap<String, HashSet<String>> {
@@ -330,45 +344,65 @@ fn get_config_path() -> PathBuf {
     }
 }
 
-fn main() -> Result<(), mlua::Error> {
-    let old_store = get_current_store();
-    let lua = Lua::new();
-    let config_path = get_config_path();
-    //println!("{:?}", config_path);
-    let lua_code = fs::read_to_string(config_path).expect("Should have been able to read the file");
+fn main() -> Result<()> {
+    let cli = Cli::parse();
 
-    //let globals = lua.globals();
-    create_module(&lua, "luadec")?;
-
-    lua.load(&lua_code).exec()?;
-
-    let modified_manager_map = check_managers();
-    let new_additions = get_new_packages(&old_store, &modified_manager_map);
-
-    if let Err(e) = add_new_packages(new_additions.clone()) {
-        eprintln!("Error adding new packages: {}", e);
+    let mut canrun: bool = false;
+    // You can check for the existence of subcommands, and if found use their
+    // matches just as you would the top level cmd
+    match &cli.command {
+        Commands::Add { name } => {
+            println!("'myapp add' was used, name is: {name:?}");
+        }
+        Commands::Run { name } => {
+            println!("running luadec: {name:?}");
+            canrun = true;
+        }
+        Commands::LisList { name } => {
+            println!("listing packages: {name:?}");
+        }
     }
+    if canrun {
+        // IF run == true do this shit.
+        let old_store = get_current_store();
+        let lua = Lua::new();
+        let config_path = get_config_path();
+        //println!("{:?}", config_path);
+        let lua_code =
+            fs::read_to_string(config_path).expect("Should have been able to read the file");
 
-    for (manager, packages) in new_additions {
-        println!("Manager: {}", manager);
-        println!("New packages: {:?}", packages);
+        //let globals = lua.globals();
+        create_module(&lua, "luadec")?;
 
-        let managers = get_manager_from_name(manager.clone());
-        let manager = managers
-            .first()
-            .unwrap_or(&Manager {
-                name: "No manager found".to_string(),
-                add: "No manager found".to_string(),
-                remove: "No manager found".to_string(),
-                sync: "No manager found".to_string(),
-                upgrade: "No manager found".to_string(),
-                priority: 0,
-            })
-            .clone();
+        lua.load(&lua_code).exec()?;
 
-        let packages_vec: Vec<String> = packages.into_iter().collect();
-        get_install_commands(manager, packages_vec);
+        let modified_manager_map = check_managers();
+        let new_additions = get_new_packages(&old_store, &modified_manager_map);
+
+        if let Err(e) = add_new_packages(new_additions.clone()) {
+            eprintln!("Error adding new packages: {}", e);
+        }
+
+        for (manager, packages) in new_additions {
+            println!("Manager: {}", manager);
+            println!("New packages: {:?}", packages);
+
+            let managers = get_manager_from_name(manager.clone());
+            let manager = managers
+                .first()
+                .unwrap_or(&Manager {
+                    name: "No manager found".to_string(),
+                    add: "No manager found".to_string(),
+                    remove: "No manager found".to_string(),
+                    sync: "No manager found".to_string(),
+                    upgrade: "No manager found".to_string(),
+                    priority: 0,
+                })
+                .clone();
+
+            let packages_vec: Vec<String> = packages.into_iter().collect();
+            get_install_commands(manager, packages_vec);
+        }
     }
-
     Ok(())
 }
