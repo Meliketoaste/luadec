@@ -14,7 +14,7 @@ use std::{
     string,
 };
 
-use serde_json; // Add serde_json for JSON serialization
+use serde_json;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
@@ -34,6 +34,7 @@ struct Manager {
     remove: String,
     sync: String,
     upgrade: String,
+    priority: i32,
 }
 
 fn get_current_store() -> HashMap<String, HashSet<String>> {
@@ -128,6 +129,7 @@ fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlu
         let source: String = config.get("content")?;
 
         let vars: LuaTable = config.get("vars")?;
+
         // if vars.is_empty() {
         //     println!("WOAHHH");
         // }
@@ -210,8 +212,10 @@ fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlu
         let name: String = manager_table.get("name")?;
         let add: String = manager_table.get("add")?;
         let remove: String = manager_table.get("remove")?;
-        let sync: String = manager_table.get("sync")?;
-        let upgrade: String = manager_table.get("upgrade")?;
+        let sync: String = manager_table.get("sync").unwrap_or("".to_string());
+        let upgrade: String = manager_table.get("upgrade").unwrap_or("".to_string());
+
+        let priority: i32 = manager_table.get("priority").unwrap_or(100);
 
         let package_manager = Manager {
             name,
@@ -219,6 +223,7 @@ fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlu
             remove,
             sync,
             upgrade,
+            priority,
         };
 
         {
@@ -266,7 +271,7 @@ fn check_managers() -> HashMap<String, HashSet<String>> {
     }
 
     for manager in undefined_managers {
-        modified_manager_map.insert(manager, HashSet::new()); // Empty set for undefined managers
+        modified_manager_map.insert(manager, HashSet::new());
     }
 
     modified_manager_map
@@ -357,6 +362,7 @@ fn main() -> Result<(), mlua::Error> {
                 remove: "No manager found".to_string(),
                 sync: "No manager found".to_string(),
                 upgrade: "No manager found".to_string(),
+                priority: 0,
             })
             .clone();
 

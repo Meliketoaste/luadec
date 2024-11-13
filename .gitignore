@@ -2,3 +2,4 @@
 Cargo.lock
 .direnv
 **/*.rs.bk
+**/package_store.json
