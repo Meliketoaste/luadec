@@ -18,7 +18,6 @@ use std::{
 
 use library::*;
 
-// I guess ill just throw the data here and do rust stuff after lua i done.
 static PACKAGE_STORE: Lazy<Mutex<HashMap<String, HashSet<String>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 static MANAGERS: Lazy<Mutex<Vec<Manager>>> = Lazy::new(|| Mutex::new(Vec::new()));
@@ -31,6 +30,7 @@ struct Manager {
     sync: String,
     upgrade: String,
     priority: i32,
+    list: String,
 }
 
 #[derive(Parser)]
@@ -48,7 +48,9 @@ enum Commands {
     /// Runs luadec (only one that works)
     Run { name: Option<String> },
     /// Lists current packages
-    LisList { name: Option<String> },
+    List { name: Option<String> },
+    /// Lists the unmanaged packages
+    Unmanaged { name: Option<String> },
 }
 
 fn get_current_store() -> HashMap<String, HashSet<String>> {
@@ -230,6 +232,7 @@ fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlu
         let upgrade: String = manager_table.get("upgrade").unwrap_or("".to_string());
 
         let priority: i32 = manager_table.get("priority").unwrap_or(100);
+        let list: String = manager_table.get("list").unwrap_or("".to_string());
 
         let package_manager = Manager {
             name,
@@ -238,6 +241,7 @@ fn create_module<'a>(lua: &'a Lua, name: &'a str) -> Result<mlua::Table<'a>, mlu
             sync,
             upgrade,
             priority,
+            list,
         };
 
         {
@@ -347,61 +351,158 @@ fn get_config_path() -> PathBuf {
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let mut canrun: bool = false;
-    // You can check for the existence of subcommands, and if found use their
-    // matches just as you would the top level cmd
     match &cli.command {
         Commands::Add { name } => {
             println!("'myapp add' was used, name is: {name:?}");
         }
         Commands::Run { name } => {
             println!("running luadec: {name:?}");
-            canrun = true;
+            luadec_run().unwrap();
         }
-        Commands::LisList { name } => {
+        Commands::List { name } => {
             println!("listing packages: {name:?}");
+            luadec_list().unwrap();
+        }
+        Commands::Unmanaged { name } => {
+            println!("listing packages: {name:?}");
+            luadec_list_unmanaged().unwrap();
         }
     }
-    if canrun {
-        // IF run == true do this shit.
-        let old_store = get_current_store();
-        let lua = Lua::new();
-        let config_path = get_config_path();
-        //println!("{:?}", config_path);
-        let lua_code =
-            fs::read_to_string(config_path).expect("Should have been able to read the file");
 
-        //let globals = lua.globals();
-        create_module(&lua, "luadec")?;
+    Ok(())
+}
 
-        lua.load(&lua_code).exec()?;
+fn luadec_run() -> Result<()> {
+    // IF run == true do this shit.
+    let old_store = get_current_store();
+    let lua = Lua::new();
+    let config_path = get_config_path();
+    //println!("{:?}", config_path);
+    let lua_code = fs::read_to_string(config_path).expect("Should have been able to read the file");
 
-        let modified_manager_map = check_managers();
-        let new_additions = get_new_packages(&old_store, &modified_manager_map);
+    //let globals = lua.globals();
+    create_module(&lua, "luadec")?;
 
-        if let Err(e) = add_new_packages(new_additions.clone()) {
-            eprintln!("Error adding new packages: {}", e);
+    lua.load(&lua_code).exec()?;
+
+    let modified_manager_map = check_managers();
+    let new_additions = get_new_packages(&old_store, &modified_manager_map);
+
+    if let Err(e) = add_new_packages(new_additions.clone()) {
+        eprintln!("Error adding new packages: {}", e);
+    }
+
+    for (manager, packages) in new_additions {
+        println!("Manager: {}", manager);
+        println!("New packages: {:?}", packages);
+
+        let managers = get_manager_from_name(manager.clone());
+        let manager = managers
+            .first()
+            .unwrap_or(&Manager {
+                name: "No manager found".to_string(),
+                add: "No manager found".to_string(),
+                remove: "No manager found".to_string(),
+                sync: "No manager found".to_string(),
+                upgrade: "No manager found".to_string(),
+                priority: 0,
+                list: "No manager found".to_string(),
+            })
+            .clone();
+
+        let packages_vec: Vec<String> = packages.into_iter().collect();
+        get_install_commands(manager, packages_vec);
+    }
+    Ok(())
+}
+
+fn luadec_list() -> Result<()> {
+    // IF run == true do this shit.
+    let lua = Lua::new();
+    let config_path = get_config_path();
+    //println!("{:?}", config_path);
+    let lua_code = fs::read_to_string(config_path).expect("Should have been able to read the file");
+
+    //let globals = lua.globals();
+    create_module(&lua, "luadec")?;
+
+    lua.load(&lua_code).exec()?;
+
+    let modified_manager_map = check_managers();
+
+    for (manager, packages) in modified_manager_map {
+        println!("Manager: {}", manager);
+        println!("New packages: {:?}", packages);
+
+        let managers = get_manager_from_name(manager.clone());
+        let manager = managers
+            .first()
+            .unwrap_or(&Manager {
+                name: "No manager found".to_string(),
+                add: "No manager found".to_string(),
+                remove: "No manager found".to_string(),
+                sync: "No manager found".to_string(),
+                upgrade: "No manager found".to_string(),
+                priority: 0,
+                list: "No manager found".to_string(),
+            })
+            .clone();
+
+        if manager.list.len() > 2 {
+            // what
+            println!("YAY");
+            if !run_command(manager.list.as_str()) {
+                println!("FUCK");
+            }
         }
+    }
+    Ok(())
+}
 
-        for (manager, packages) in new_additions {
-            println!("Manager: {}", manager);
-            println!("New packages: {:?}", packages);
+fn luadec_list_unmanaged() -> Result<()> {
+    // IF run == true do this shit.
+    let old_store = get_current_store();
+    let lua = Lua::new();
+    let config_path = get_config_path();
+    //println!("{:?}", config_path);
+    let lua_code = fs::read_to_string(config_path).expect("Should have been able to read the file");
 
-            let managers = get_manager_from_name(manager.clone());
-            let manager = managers
-                .first()
-                .unwrap_or(&Manager {
-                    name: "No manager found".to_string(),
-                    add: "No manager found".to_string(),
-                    remove: "No manager found".to_string(),
-                    sync: "No manager found".to_string(),
-                    upgrade: "No manager found".to_string(),
-                    priority: 0,
-                })
-                .clone();
+    //let globals = lua.globals();
+    create_module(&lua, "luadec")?;
 
-            let packages_vec: Vec<String> = packages.into_iter().collect();
-            get_install_commands(manager, packages_vec);
+    lua.load(&lua_code).exec()?;
+
+    let modified_manager_map = check_managers();
+    let new_additions = get_new_packages(&old_store, &modified_manager_map);
+
+    if let Err(e) = add_new_packages(new_additions.clone()) {
+        eprintln!("Error adding new packages: {}", e);
+    }
+
+    for (manager, packages) in modified_manager_map {
+        println!("Manager: {}", manager);
+        println!("New packages: {:?}", packages);
+
+        let managers = get_manager_from_name(manager.clone());
+        let manager = managers
+            .first()
+            .unwrap_or(&Manager {
+                name: "No manager found".to_string(),
+                add: "No manager found".to_string(),
+                remove: "No manager found".to_string(),
+                sync: "No manager found".to_string(),
+                upgrade: "No manager found".to_string(),
+                priority: 0,
+                list: "No manager found".to_string(),
+            })
+            .clone();
+
+        if manager.list.len() > 2 {
+            // what
+            println!("YAY");
+            if !run_command(manager.list.as_str()) {
+                println!("FUCK");
+            }
         }
     }
     Ok(())
